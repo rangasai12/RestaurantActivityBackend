@@ -1,12 +1,9 @@
-# from itertools import count
-# from sqlalchemy import create_engine, Column, Integer, String, DateTime, Time
-# from sqlalchemy.orm import declarative_base, sessionmaker
+
 from sqlalchemy.sql import func,cast,desc,asc
 from models import Activity,BusinessHours,Base,Timezone
 import datetime
 from datetime import timedelta
 import pytz
-# from connect import session
 import csv
 import os
 
@@ -21,18 +18,41 @@ def convert_to_local(timeobj,time_zone):
 
 
 def convert_to_datetime(timestamp_str):
+    """
+    Converts a string timestamp to a datetime object.
+    
+    Args:
+        timestamp_str (str): The timestamp string in the format "%Y-%m-%d %H:%M:%S.%f %Z".
+    
+    Returns:
+        datetime: The corresponding datetime object.
+    """
+
     return datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f %Z")
 
 current_time = "2023-01-25 18:13:22.47922 UTC"
 
 current_time = convert_to_datetime(current_time)
 
-# starting_time = current_time - timedelta(hours=24)
 global starting_time
 
 csv_files = []
 
 def last_hour(store_id,current_time,session,hours):
+
+    """
+    Retrieves activities within the last 'hours' for a specific store.
+    
+    Args:
+        store_id (int): The store's ID.
+        current_time (datetime): The current timestamp.
+        session (Session): The database session.
+        hours (int): Number of hours to consider.
+    
+    Returns:
+        List[Activity]: List of activities within the last 'hours'.
+    """
+
     activities = session.query(Activity).\
     filter(Activity.store_id == store_id).order_by(asc(Activity.timestamp_utc))
 
@@ -44,11 +64,19 @@ def last_hour(store_id,current_time,session,hours):
             if convert_to_datetime(activity.timestamp_utc) <= current_time:
                 activities_in_range.append(activity)
 
-    # print(activities_in_range)
     return activities_in_range
 
 def find_business_hours(store_id,session):
-
+    """
+    gets business hours for each day of the week for a specific store.
+    
+    Args:
+        store_id (int): The store's ID.
+        session (Session): The database session.
+    
+    Returns:
+        Business hours for each day of the week.
+    """
 
     businessHours=session.query(BusinessHours).filter(BusinessHours.store_id == store_id)
 
@@ -73,6 +101,20 @@ def find_business_hours(store_id,session):
 
 
 def filter_polls(store_id , last_hour,businessTime,session):
+
+    """
+    Filters activities based on business hours and returns filtered data.
+    
+    Args:
+        store_id (int): The store's ID.
+        last_hour_activities (List[Activity]): List of activities within the last hour.
+        business_hours (Dict[int, List[Dict[str, str]]]): Business hours for each day of the week.
+        session (Session): The database session.
+    
+    Returns:
+        Filtered activity data and total business hours time.
+    """
+
     timeZones = session.query(Timezone).filter(Timezone.store_id == store_id)
     businessTime = find_business_hours(store_id,session)
     filtered_dates = []
@@ -102,25 +144,20 @@ def filter_polls(store_id , last_hour,businessTime,session):
 
     total_difference = timedelta()
     starting_time_local = convert_to_local(starting_time,timeZone).replace(tzinfo=None)
-    # print("business time-------------------" , businessTime)
-    # print("last hour -----------------------------", last_hour)
-    # print("store id ----------------------------",store_id)
-    # print("timings ===================================== ",timings)
-    # print("filtered dates ======================================",filtered_dates)
+
     if filtered_dates == []:
         return None,None
-    # print("--------------- start time local", starting_time_local)
+
     if starting_time_local > datetime.datetime.combine(timings[0]['date'],timings[0]['start_time']):
         timings[0]['start_time']= starting_time_local.time()
     
-    # print("current time ------------------------",current_time)
-    # print("end time ----------------------------",timings[-1]['end_time'])
+
     current_time_local = convert_to_local(current_time,timeZone).replace(tzinfo=None)
-    # print("--------------- start time local", starting_time_local)
+
     if current_time_local < datetime.datetime.combine(timings[-1]['date'],timings[-1]['end_time']):
         timings[-1]["end_time"] = current_time_local.time()
     
-    # print("new timings ------ ", timings)
+
     for entry in timings:
         start_time = datetime.datetime.combine(entry['date'], entry['start_time'])
         end_time = datetime.datetime.combine(entry['date'], entry['end_time'])
@@ -133,6 +170,19 @@ def filter_polls(store_id , last_hour,businessTime,session):
 
 
 def get_active_inactive(store_id, current_time,session,hours):
+    """
+    Calculates active and inactive hours within the last 'hours' for a specific store.
+    
+    Args:
+        store_id (int): The store's ID.
+        current_time (datetime): The current timestamp.
+        session (Session): The database session.
+        hours (int): Number of hours to consider.
+    
+    Returns:
+        Active hours, inactive hours, and total business hours time.
+    """
+
     data,total_difference = filter_polls(store_id,last_hour(store_id,current_time,session,hours),find_business_hours(store_id,session),session)
 
     print("total difference",total_difference) # total difference is the total business hours time
@@ -141,22 +191,23 @@ def get_active_inactive(store_id, current_time,session,hours):
     active_hours = 0
     inactive_hours = 0
 
-
+    """ 
+    The active and inactive hours are calculated based on the differences between each entry
+    if the difference between two entries is less than 1 hour 10 minutes, then based on the current entries status
+    the value of the active and inactive hours are calculated. if the difference is greater than the threashold 
+    the entries are discarded.
+    """
     for i in range(len(data)):
         poll_status = data[i]['poll']
         local_time = data[i]['local_time']
         prev_time = data[i-1]['local_time']
         if poll_status == "active":
-            # print("local time",local_time)
+
             if (abs(local_time - prev_time).total_seconds())<=4200:
                 active_hours += abs((local_time - prev_time).total_seconds())
         else:
             if abs((local_time - prev_time).total_seconds())<=4200:
                 inactive_hours += abs((local_time - prev_time).total_seconds())
-
-    print("active hours ----",active_hours/3600)
-    print("inactive hours ----",inactive_hours/3600)
-
 
 
     return active_hours, inactive_hours , total_difference.total_seconds()
@@ -178,7 +229,21 @@ def write_to_csv(folder_path, csv_id, data):
 
 
 def update_active_inactive(active,inactive,total_time,hour):
+    """
+    updates active and inactive hours based on remaining time and current active to inactive  ratio.
+    the function get_active_inactive does not consider the business hours that haven't been recoreded by an entry
+    so this function calculates the ratio of active and inactive hours,
+    and calculates the active and inactive time periods based on the ratio calculated for the remaining time
+
+    Args:
+        active (float): Active hours.
+        inactive (float): Inactive hours.
+        total_time (float): Total time (business hours).
+        hour (int): Number of hours being considered.
     
+    Returns:
+        Updated active and inactive hours.
+    """
     combined_total = inactive+active
     remaining_time = total_time-combined_total
     if inactive>0 and active>0:
@@ -206,9 +271,19 @@ def update_active_inactive(active,inactive,total_time,hour):
 
 def generate_report(session,current_time,csv_id,*hours):
 
-
-    # starting_time=  current_time - timedelta(hours=24)
-
+    """
+    Generates a report for the specified hours and stores the results in a CSV file.
+    
+    Args:
+        session (Session): The database session.
+        current_time (datetime): The current timestamp.
+        csv_id (str): The ID for the CSV file.
+        *hours (int): Variable number of hours to consider.
+    
+    Returns:
+        str: The CSV ID.
+    """
+    
     unique_store_ids = (
         session.query(Activity.store_id)
         .distinct()
@@ -233,8 +308,3 @@ def generate_report(session,current_time,csv_id,*hours):
     
     return csv_id
         
-
-
-
-
-# get_active_inactive(3099276129248509001,current_time)
