@@ -119,7 +119,8 @@ def filter_polls(store_id , last_hour,businessTime,session):
     businessTime = find_business_hours(store_id,session)
     filtered_dates = []
     timings = []
-
+    
+    #check if timezone exists if not default to Chicago
     try:   
         if timeZones[0].timezone_str:
             timeZone = timeZones[0].timezone_str
@@ -147,17 +148,22 @@ def filter_polls(store_id , last_hour,businessTime,session):
 
     if filtered_dates == []:
         return None,None
-
+    """
+    replace start_time in timings with starting_time , if starting_time is greater than start_time 
+    if not keep same, because only within business hours should be calculated.
+    """
     if starting_time_local > datetime.datetime.combine(timings[0]['date'],timings[0]['start_time']):
         timings[0]['start_time']= starting_time_local.time()
     
 
     current_time_local = convert_to_local(current_time,timeZone).replace(tzinfo=None)
-
+    """
+    replace end_time in timings with current_time , if current_time is lesser than start_time
+    """
     if current_time_local < datetime.datetime.combine(timings[-1]['date'],timings[-1]['end_time']):
         timings[-1]["end_time"] = current_time_local.time()
     
-
+    #find the total time overlap between business hours and the start_time and end_time
     for entry in timings:
         start_time = datetime.datetime.combine(entry['date'], entry['start_time'])
         end_time = datetime.datetime.combine(entry['date'], entry['end_time'])
