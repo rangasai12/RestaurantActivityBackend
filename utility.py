@@ -107,7 +107,7 @@ def filter_polls(store_id , last_hour,businessTime,session):
     
     Args:
         store_id (int): The store's ID.
-        last_hour_activities (List[Activity]): List of activities within the last hour.
+        last_hour_activities (List[Activity]): List of activities within the last "hour".
         business_hours (Dict[int, List[Dict[str, str]]]): Business hours for each day of the week.
         session (Session): The database session.
     
@@ -133,8 +133,8 @@ def filter_polls(store_id , last_hour,businessTime,session):
             for slot in businessTime[day_of_week]:
                 start_time = datetime.datetime.strptime(slot['start'], '%H:%M:%S').time()
                 end_time = datetime.datetime.strptime(slot['end'], '%H:%M:%S').time()
-                
                 if start_time<= local_time.time() <=end_time:
+
 
                     if {"date":local_time.date(),"start_time":start_time, "end_time":end_time } not in timings:
                         timings.append({"date":local_time.date(),"start_time":start_time, "end_time":end_time })
@@ -197,18 +197,25 @@ def get_active_inactive(store_id, current_time,session,hours):
     the value of the active and inactive hours are calculated. if the difference is greater than the threashold 
     the entries are discarded.
     """
-    for i in range(len(data)):
-        poll_status = data[i]['poll']
-        local_time = data[i]['local_time']
-        prev_time = data[i-1]['local_time']
-        if poll_status == "active":
-
-            if (abs(local_time - prev_time).total_seconds())<=4200:
-                active_hours += abs((local_time - prev_time).total_seconds())
+    if len(data)==1:
+        if data[0]["poll"]=="active":
+            active_hours = total_difference.total_seconds()
+            inactive_hours = 0
         else:
-            if abs((local_time - prev_time).total_seconds())<=4200:
-                inactive_hours += abs((local_time - prev_time).total_seconds())
+            active_hours = 0
+            inactive_hours= total_difference.total_seconds()
+    else:   
+        for i in range(len(data)):
+            poll_status = data[i]['poll']
+            local_time = data[i]['local_time']
+            prev_time = data[i-1]['local_time']
+            if poll_status == "active":
 
+                if (abs(local_time - prev_time).total_seconds())<=4200:
+                    active_hours += abs((local_time - prev_time).total_seconds())
+            else:
+                if abs((local_time - prev_time).total_seconds())<=4200:
+                    inactive_hours += abs((local_time - prev_time).total_seconds())
 
     return active_hours, inactive_hours , total_difference.total_seconds()
 
@@ -218,7 +225,7 @@ def write_to_csv(folder_path, csv_id, data):
     if not os.path.exists(csv_filename):
         with open(csv_filename, 'w', newline='') as file:
             writer = csv.writer(file)
-            headers = ['uptime_last_hour', 'downtime_last_hour', 'uptime_last_day', 'downtime_last_day', 'uptime_last_week', 'downtime_last_week']
+            headers = ['store_id','uptime_last_hour', 'downtime_last_hour', 'uptime_last_day', 'downtime_last_day', 'uptime_last_week', 'downtime_last_week']
             writer.writerow(headers)
 
     with open(csv_filename, 'a', newline='') as file:
@@ -233,7 +240,7 @@ def update_active_inactive(active,inactive,total_time,hour):
     updates active and inactive hours based on remaining time and current active to inactive  ratio.
     the function get_active_inactive does not consider the business hours that haven't been recoreded by an entry
     so this function calculates the ratio of active and inactive hours,
-    and calculates the active and inactive time periods based on the ratio calculated for the remaining time
+    and calculates the active and inactive time periods based on the ratio calculated for the remaining time.
 
     Args:
         active (float): Active hours.
@@ -245,8 +252,9 @@ def update_active_inactive(active,inactive,total_time,hour):
         Updated active and inactive hours.
     """
     combined_total = inactive+active
-    remaining_time = total_time-combined_total
-    
+    remaining_time = abs(total_time-combined_total)
+
+
     if inactive>0 and active>0:
         active_ratio = active/combined_total
         remaining_active = active_ratio*remaining_time
@@ -265,7 +273,7 @@ def update_active_inactive(active,inactive,total_time,hour):
 
     total_active = active+remaining_active
     total_inactive = inactive+remaining_inactive
-    
+
     if hour==1:
         return round(total_active/60,1),round(total_inactive/60,1)
     else:
@@ -295,7 +303,7 @@ def generate_report(session,current_time,csv_id,*hours):
     
     store_ids = [store_id for (store_id,) in unique_store_ids]
     final_results=[]
-    for store_id in store_ids[2000:2020]:
+    for store_id in store_ids[2000:2100]:
         results = [store_id]
         for hour in hours:
             active_in_hour,inactive_hour,hour_time = get_active_inactive(store_id, current_time,session,hour)
@@ -311,3 +319,4 @@ def generate_report(session,current_time,csv_id,*hours):
     
     return csv_id
         
+# print(get_active_inactive(9122327436359134395,current_time,session,1))
