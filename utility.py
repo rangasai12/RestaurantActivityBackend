@@ -246,19 +246,22 @@ def update_active_inactive(active,inactive,total_time,hour):
     """
     combined_total = inactive+active
     remaining_time = total_time-combined_total
+    
     if inactive>0 and active>0:
-        combined_total = inactive+active
         active_ratio = active/combined_total
         remaining_active = active_ratio*remaining_time
         remaining_inactive = remaining_time-remaining_active
 
-    elif inactive==0:
+    elif inactive==0 and active>0:
         remaining_active = remaining_time
         remaining_inactive = inactive
     
-    else:
+    elif active==0 and inactive>0:
         remaining_active = active
         remaining_inactive = remaining_time
+
+    else:
+        return 0,0
 
     total_active = active+remaining_active
     total_inactive = inactive+remaining_inactive
